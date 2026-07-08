@@ -1,6 +1,12 @@
-import { supabase } from './client'
+import { supabase, isSupabaseConfigured } from './client'
+
+const emptyResult = { data: null, error: null }
 
 export async function signInWithEmail(email, password) {
+  if (!isSupabaseConfigured) {
+    return { data: null, error: new Error('Supabase is not configured') }
+  }
+
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   return { data, error }
 }
@@ -81,12 +87,16 @@ export async function signOut() {
 }
 
 export async function getCurrentSession() {
+  if (!isSupabaseConfigured) {
+    return emptyResult
+  }
+
   const { data, error } = await supabase.auth.getSession()
   return { data, error }
 }
 
 export async function getProfile(userId) {
-  if (!userId) {
+  if (!userId || !isSupabaseConfigured) {
     return { data: null, error: null }
   }
 
@@ -99,5 +109,9 @@ export async function getProfile(userId) {
 }
 
 export function onAuthStateChange(callback) {
+  if (!isSupabaseConfigured) {
+    return { subscription: { unsubscribe: () => {} } }
+  }
+
   return supabase.auth.onAuthStateChange((event, session) => callback(event, session))
 }

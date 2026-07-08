@@ -3,11 +3,17 @@ import { supabase } from '../supabase/client'
 import useUserStore from '../store/userStore'
 import { getCurrentSession, getProfile } from '../supabase/authService'
 
+import { supabase, isSupabaseConfigured } from '../supabase/client'
+
 function AuthListener() {
   const loginSuccess = useUserStore((state) => state.loginSuccess)
   const logout = useUserStore((state) => state.logout)
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      return undefined
+    }
+
     let subscription
 
     async function loadSession() {
