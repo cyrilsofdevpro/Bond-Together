@@ -1,8 +1,6 @@
 import { useEffect } from 'react'
-import { supabase } from '../supabase/client'
 import useUserStore from '../store/userStore'
 import { getCurrentSession, getProfile } from '../supabase/authService'
-
 import { supabase, isSupabaseConfigured } from '../supabase/client'
 
 function AuthListener() {
