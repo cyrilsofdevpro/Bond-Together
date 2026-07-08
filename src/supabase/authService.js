@@ -7,17 +7,29 @@ export async function signInWithEmail(email, password) {
     return { data: null, error: new Error('Supabase is not configured') }
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-  return { data, error }
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    return { data, error }
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error : new Error(JSON.stringify(error)) }
+  }
 }
 
 export async function signUpWithEmail(fullName, email, password) {
-  const { data, error } = await supabase.auth.signUp(
-    { email, password },
-    { data: { full_name: fullName } }
-  )
+  if (!isSupabaseConfigured) {
+    return { data: null, error: new Error('Supabase is not configured') }
+  }
 
-  return { data, error }
+  try {
+    const { data, error } = await supabase.auth.signUp(
+      { email, password },
+      { data: { full_name: fullName } }
+    )
+
+    return { data, error }
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error : new Error(JSON.stringify(error)) }
+  }
 }
 
 export async function signOut() {

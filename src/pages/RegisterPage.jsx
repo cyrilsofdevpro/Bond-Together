@@ -17,7 +17,8 @@ function RegisterPage() {
 
     const { data, error } = await signUpWithEmail(fullName, email, password)
     if (error) {
-      setError(error.message)
+      const message = error.message || JSON.stringify(error) || 'Signup failed. Please check your Supabase auth and SMTP configuration.'
+      setError(message)
       return
     }
 
