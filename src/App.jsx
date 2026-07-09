@@ -24,6 +24,7 @@ import NotificationsPage from './pages/NotificationsPage'
 import MessagesPage from './pages/MessagesPage'
 import RecommendedPage from './pages/RecommendedPage'
 import AdminDashboardPage from './pages/AdminDashboardPage'
+import RequireAdmin from './components/RequireAdmin'
 import NotFoundPage from './pages/NotFoundPage'
 import RequireAuth from './components/RequireAuth'
 import RequireMembership from './components/RequireMembership'
@@ -60,7 +61,11 @@ function App() {
           </Route>
         </Route>
 
-        <Route path="/admin" element={<AdminDashboardPage />} />
+        <Route element={<RequireAuth />}>
+          <Route element={<RequireAdmin />}>
+            <Route path="/admin" element={<AdminDashboardPage />} />
+          </Route>
+        </Route>
         <Route path="/404" element={<NotFoundPage />} />
         <Route path="*" element={<Navigate to="/404" replace />} />
       </Routes>
