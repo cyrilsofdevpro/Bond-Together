@@ -214,9 +214,19 @@ begin
   set used = true,
       used_by = v_user,
       used_at = now()
-  where id = v_code.id;
+  where public.activation_codes.id = v_code.id;
 
-  return query select * from inserted;
+  -- Explicitly select inserted columns to avoid ambiguous column references
+  return query
+  select
+    inserted.id,
+    inserted.user_id,
+    inserted.plan_key,
+    inserted.activation_code_id,
+    inserted.activated_at,
+    inserted.expires_at,
+    inserted.created_at
+  from inserted;
 end;
 $$;
 
