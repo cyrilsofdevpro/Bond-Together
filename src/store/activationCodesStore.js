@@ -60,12 +60,14 @@ const useActivationCodesStore = create((set, get) => ({
         return { error }
       }
 
+      const rows = Array.isArray(data) ? data : data ? [data] : []
+
       // RPC returns rows with `code` field
-      const codes = (Array.isArray(data) ? data : []).map((r) => ({
+      const codes = rows.map((r) => ({
         id: r.code,
         plan,
         code: r.code,
-        createdAt: Date.now(),
+        createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
       }))
 
       set((state) => {
