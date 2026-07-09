@@ -10,7 +10,7 @@ const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || '*'
 const PORT = process.env.PORT || 8080
 const ADMIN_API_SECRET = process.env.ADMIN_API_SECRET || ''
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables.')
   process.exit(1)
 }
@@ -50,11 +50,23 @@ function parsePostgresInterval(interval) {
   )
 }
 
-function sendJson(res, statusCode, payload) {
+function getCorsOrigin(req) {
+  const requestOrigin = (req.headers.origin || '').toString()
+  if (!CLIENT_ORIGIN) return '*'
+  if (CLIENT_ORIGIN.trim() === '*') return '*'
+  const allowed = CLIENT_ORIGIN.split(',').map((s) => s.trim())
+  if (allowed.includes(requestOrigin)) return requestOrigin
+  if (allowed.includes('*')) return '*'
+  // fallback to the first configured origin
+  return allowed[0] || 'null'
+}
+
+function sendJson(req, res, statusCode, payload) {
+  const origin = getCorsOrigin(req)
   res.writeHead(statusCode, {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': CLIENT_ORIGIN,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   })
   res.end(JSON.stringify(payload))
@@ -62,9 +74,10 @@ function sendJson(res, statusCode, payload) {
 
 const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
+    const origin = getCorsOrigin(req)
     res.writeHead(204, {
-      'Access-Control-Allow-Origin': CLIENT_ORIGIN,
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     })
     return res.end()
@@ -72,36 +85,36 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method !== 'POST' || req.url !== '/activate-code') {
     // simple admin endpoint for fetching users/profiles/memberships
-    if (req.method === 'GET' && req.url === '/admin/data') {
+      if (req.method === 'GET' && req.url === '/admin/data') {
       const auth = req.headers.authorization || ''
       if (!ADMIN_API_SECRET || auth !== `Bearer ${ADMIN_API_SECRET}`) {
-        return sendJson(res, 401, { error: 'unauthorized' })
+        return sendJson(req, res, 401, { error: 'unauthorized' })
       }
 
       try {
         // list users using service role
         const { data: users, error: usersError } = await supabase.auth.admin.listUsers()
         if (usersError) {
-          return sendJson(res, 500, { error: 'failed_list_users', details: usersError.message })
+          return sendJson(req, res, 500, { error: 'failed_list_users', details: usersError.message })
         }
 
         const { data: profiles, error: profilesError } = await supabase.from('profiles').select('*')
         if (profilesError) {
-          return sendJson(res, 500, { error: 'failed_fetch_profiles', details: profilesError.message })
+          return sendJson(req, res, 500, { error: 'failed_fetch_profiles', details: profilesError.message })
         }
 
         const { data: memberships, error: membershipsError } = await supabase.from('user_memberships').select('*')
         if (membershipsError) {
-          return sendJson(res, 500, { error: 'failed_fetch_memberships', details: membershipsError.message })
+          return sendJson(req, res, 500, { error: 'failed_fetch_memberships', details: membershipsError.message })
         }
 
-        return sendJson(res, 200, { users: users?.users || users, profiles, memberships })
+        return sendJson(req, res, 200, { users: users?.users || users, profiles, memberships })
       } catch (err) {
-        return sendJson(res, 500, { error: 'server_error', details: err?.message || String(err) })
+        return sendJson(req, res, 500, { error: 'server_error', details: err?.message || String(err) })
       }
     }
 
-    return sendJson(res, 404, { error: 'Not found' })
+    return sendJson(req, res, 404, { error: 'Not found' })
   }
 
   try {
