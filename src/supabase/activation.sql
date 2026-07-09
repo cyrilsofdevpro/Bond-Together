@@ -59,8 +59,7 @@ alter table public.activation_codes enable row level security;
 alter table public.user_memberships enable row level security;
 
 -- Helper to determine whether current authenticated user is an admin.
-drop function if exists public.is_admin_user();
-create function public.is_admin_user()
+create or replace function public.is_admin_user()
 returns boolean
 language plpgsql
 security definer
