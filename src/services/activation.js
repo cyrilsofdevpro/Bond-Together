@@ -1,16 +1,16 @@
-export async function activateMembershipCode(code, accessToken) {
-  const response = await fetch('http://localhost:8080/activate-code', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ code: String(code || '').trim().toUpperCase() }),
-  })
+import { supabase, isSupabaseConfigured } from '../supabase/client'
 
-  const result = await response.json()
-  if (!response.ok) {
-    throw result
+export async function activateMembershipCode(code) {
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase is not configured')
   }
-  return result.membership
+
+  const trimmedCode = String(code || '').trim().toUpperCase()
+  const { data, error } = await supabase.rpc('redeem_activation_code', { p_code: trimmedCode })
+
+  if (error) {
+    throw error
+  }
+
+  return data
 }

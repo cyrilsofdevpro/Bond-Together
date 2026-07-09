@@ -82,12 +82,10 @@ const useUserStore = create((set, get) => ({
     }
 
     try {
-      const accessToken = sess.access_token
-      const membershipRow = await activateMembershipCode(normalizedCode, accessToken)
+      const membershipRow = await activateMembershipCode(normalizedCode)
 
       if (!membershipRow) {
-        return { error: { message: 'no_data' } }
-      }
+        return { error: { message: 'no_data' } } }
 
       const planTitles = {
         basic: 'Basic Membership',

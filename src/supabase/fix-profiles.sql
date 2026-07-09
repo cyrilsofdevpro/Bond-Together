@@ -1,6 +1,6 @@
 -- Run this in the Supabase SQL Editor
 
-create extension if not exists "uuid-ossp";
+create extension if not exists "pgcrypto";
 
 create table if not exists public.profiles (
   id uuid primary key default gen_random_uuid(),
