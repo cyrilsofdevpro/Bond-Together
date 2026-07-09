@@ -44,7 +44,9 @@ const useUserStore = create((set, get) => ({
   profile: null,
   session: null,
   isAuthenticated: false,
+  authInitialized: false,
   membership: readStoredMembership(),
+  setAuthInitialized: (v) => set({ authInitialized: v }),
   setSession: (session) => set({ session, isAuthenticated: Boolean(session?.user), profile: null }),
   setUserProfile: (profile) => set({ profile }),
   loginSuccess: (session, profile) => {

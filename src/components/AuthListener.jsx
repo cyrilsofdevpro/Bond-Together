@@ -6,6 +6,7 @@ import { supabase, isSupabaseConfigured } from '../supabase/client'
 function AuthListener() {
   const loginSuccess = useUserStore((state) => state.loginSuccess)
   const logout = useUserStore((state) => state.logout)
+  const setAuthInitialized = useUserStore((state) => state.setAuthInitialized)
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -22,6 +23,12 @@ function AuthListener() {
         const profileResult = await getProfile(data.session.user.id)
         loginSuccess(data.session, profileResult.data)
       }
+      // mark auth as initialized (we attempted to load session)
+      try {
+        setAuthInitialized(true)
+      } catch (e) {
+        // ignore
+      }
     }
 
     loadSession()
@@ -35,6 +42,13 @@ function AuthListener() {
 
       logout()
     })
+
+    // ensure authInitialized is set when auth state changes (covers logout path)
+    try {
+      setAuthInitialized(true)
+    } catch (e) {
+      // ignore
+    }
 
     subscription = authListener?.subscription
 
