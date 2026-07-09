@@ -173,8 +173,7 @@ returns table (
   plan_key text,
   activation_code_id uuid,
   activated_at timestamptz,
-  expires_at timestamptz,
-  created_at timestamptz
+  expires_at timestamptz
 )
 language plpgsql
 security definer
@@ -207,7 +206,7 @@ begin
   with inserted as (
     insert into public.user_memberships (user_id, plan_key, activation_code_id, activated_at, expires_at)
     values (v_user, v_code.plan_key, v_code.id, now(), v_expires)
-    returning id, user_id, plan_key, activation_code_id, activated_at, expires_at, created_at
+    returning id, user_id, plan_key, activation_code_id, activated_at, expires_at
   )
   update public.activation_codes
   set used = true,
@@ -223,8 +222,7 @@ begin
     inserted.plan_key,
     inserted.activation_code_id,
     inserted.activated_at,
-    inserted.expires_at,
-    inserted.created_at
+    inserted.expires_at
   from inserted;
 end;
 $$;
