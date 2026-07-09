@@ -5,11 +5,16 @@ import useUserStore from '../store/userStore'
 function RequireAdmin() {
   const isAuthenticated = useUserStore((state) => state.isAuthenticated)
   const profile = useUserStore((state) => state.profile)
+  const session = useUserStore((state) => state.session)
   const location = useLocation()
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
 
-  const isAdmin = profile?.role === 'admin' || profile?.isAdmin === true
+  const isAdmin =
+    profile?.role === 'admin' ||
+    profile?.isAdmin === true ||
+    session?.user?.app_metadata?.role === 'admin' ||
+    session?.user?.role === 'admin'
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />
