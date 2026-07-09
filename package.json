@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "serve": "node server.js",
+    "create-admin": "node scripts/create-admin.js",
     "lint": "echo \"No lint configured\""
   },
   "dependencies": {
