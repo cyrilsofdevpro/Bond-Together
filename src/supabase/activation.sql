@@ -23,57 +23,6 @@ create table if not exists public.user_memberships (
   created_at timestamptz not null default now()
 );
 
-BEGIN;
--- Acquire DDL locks in a stable order to avoid deadlock when updating policies and triggers.
-lock table public.activation_codes,
-           public.user_memberships,
-           auth.users
-           in access exclusive mode;
-
-alter table public.activation_codes enable row level security;
-alter table public.user_memberships enable row level security;
-
--- Allow users to read and create only their own membership records.
-drop policy if exists "Users can view own memberships" on public.user_memberships;
-create policy "Users can view own memberships"
-  on public.user_memberships
-  for select
-  using (auth.uid() = user_id);
-
-drop policy if exists "Users can insert own membership" on public.user_memberships;
-create policy "Users can insert own membership"
-  on public.user_memberships
-  for insert
-  with check (auth.uid() = user_id);
-
-drop policy if exists "Admin can manage memberships" on public.user_memberships;
-create policy "Admin can manage memberships"
-  on public.user_memberships
-  for all
-  using (
-    auth.jwt() ->> 'role' = 'admin'
-    or auth.role() = 'service_role'
-  )
-  with check (
-    auth.jwt() ->> 'role' = 'admin'
-    or auth.role() = 'service_role'
-  );
-
-COMMIT;
-
--- Prevent normal users from reading activation codes directly.
-drop policy if exists "Admin can manage activation codes" on public.activation_codes;
-create policy "Admin can manage activation codes"
-  on public.activation_codes
-  for all
-  using (
-    auth.jwt() ->> 'role' = 'admin'
-    or auth.role() = 'service_role'
-  )
-  with check (
-    auth.jwt() ->> 'role' = 'admin'
-    or auth.role() = 'service_role'
-  );
 
 -- Create or update user profile on signup if missing.
 create or replace function public.handle_new_user()
@@ -99,7 +48,94 @@ create trigger on_auth_user_created
 after insert on auth.users
 for each row execute function public.handle_new_user();
 
--- Generate activation codes via RPC. Calls must be made by an admin or service-role session.
+BEGIN;
+-- Acquire DDL locks in a stable order to avoid deadlock when updating policies and triggers.
+lock table public.activation_codes,
+           public.user_memberships,
+           auth.users
+           in access exclusive mode;
+
+alter table public.activation_codes enable row level security;
+alter table public.user_memberships enable row level security;
+
+-- Helper to determine whether current authenticated user is an admin.
+drop function if exists public.is_admin_user();
+create function public.is_admin_user()
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_is_admin boolean := false;
+begin
+  if auth.jwt() ->> 'role' = 'admin'
+     or auth.jwt() -> 'app_metadata' ->> 'role' = 'admin' then
+    return true;
+  end if;
+
+  begin
+    select is_admin into v_is_admin
+    from public.profiles
+    where user_id = auth.uid()
+    limit 1;
+  exception when undefined_column then
+    return false;
+  when others then
+    return false;
+  end;
+
+  return coalesce(v_is_admin, false);
+end;
+$$;
+
+-- Allow users to read and create only their own membership records.
+drop policy if exists "Users can view own memberships" on public.user_memberships;
+create policy "Users can view own memberships"
+  on public.user_memberships
+  for select
+  using (auth.uid() = user_id);
+
+ drop policy if exists "Users can insert own membership" on public.user_memberships;
+create policy "Users can insert own membership"
+  on public.user_memberships
+  for insert
+  with check (auth.uid() = user_id);
+
+ drop policy if exists "Admin can manage memberships" on public.user_memberships;
+create policy "Admin can manage memberships"
+  on public.user_memberships
+  for all
+  using (
+    auth.jwt() -> 'app_metadata' ->> 'role' = 'admin'
+    or auth.role() = 'service_role'
+    or public.is_admin_user()
+  )
+  with check (
+    auth.jwt() -> 'app_metadata' ->> 'role' = 'admin'
+    or auth.role() = 'service_role'
+    or public.is_admin_user()
+  );
+
+COMMIT;
+
+-- Prevent normal users from reading activation codes directly.
+drop policy if exists "Admin can manage activation codes" on public.activation_codes;
+create policy "Admin can manage activation codes"
+  on public.activation_codes
+  for all
+  using (
+    auth.jwt() -> 'app_metadata' ->> 'role' = 'admin'
+    or auth.role() = 'service_role'
+    or public.is_admin_user()
+  )
+  with check (
+    auth.jwt() -> 'app_metadata' ->> 'role' = 'admin'
+    or auth.role() = 'service_role'
+    or public.is_admin_user()
+  );
+
+-- Generate activation codes via RPC. Calls must be made by an admin user or service-role session.
 drop function if exists public.generate_activation_codes(text, int, interval);
 create function public.generate_activation_codes(
   p_plan text,
@@ -112,7 +148,9 @@ security definer
 set search_path = public
 as $$
 begin
-  if auth.jwt() ->> 'role' <> 'admin' and auth.role() <> 'service_role' then
+  if auth.jwt() -> 'app_metadata' ->> 'role' <> 'admin'
+     and auth.role() <> 'service_role'
+     and not public.is_admin_user() then
     raise exception 'not_authorized';
   end if;
 
@@ -123,7 +161,7 @@ begin
     p_plan,
     p_duration
   from generate_series(1, p_count)
-  returning id, code, plan_key, duration, created_at;
+  returning public.activation_codes.id, public.activation_codes.code, public.activation_codes.plan_key, public.activation_codes.duration, public.activation_codes.created_at;
 end;
 $$;
 
@@ -217,7 +255,9 @@ security definer
 set search_path = public
 as $$
 begin
-  if auth.jwt() ->> 'role' <> 'admin' and auth.role() <> 'service_role' then
+  if auth.jwt() -> 'app_metadata' ->> 'role' <> 'admin'
+     and auth.role() <> 'service_role'
+     and not public.is_admin_user() then
     raise exception 'not_authorized';
   end if;
 
@@ -237,7 +277,9 @@ security definer
 set search_path = public
 as $$
 begin
-  if auth.jwt() ->> 'role' <> 'admin' and auth.role() <> 'service_role' then
+  if auth.jwt() -> 'app_metadata' ->> 'role' <> 'admin'
+     and auth.role() <> 'service_role'
+     and not public.is_admin_user() then
     raise exception 'not_authorized';
   end if;
 

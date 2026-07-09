@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { supabase } from '../supabase/client'
 import useActivationCodesStore from '../store/activationCodesStore'
 import useBooksStore from '../store/booksStore'
 import useUserStore from '../store/userStore'
@@ -92,10 +93,19 @@ function AdminDashboardPage() {
     setApprovalMessage(`“${book.title}” was approved and added to the public catalog.`)
   }
 
-  const handleGenerateCodes = (event) => {
+  const handleGenerateCodes = async (event) => {
     event.preventDefault()
+    setActivationMessage('')
+    setErrorMessage('')
     const count = Number(codeCount) || 1
-    generateCodes(codePlan, count)
+    const result = await generateCodes(codePlan, count)
+
+    if (result?.error) {
+      setActivationMessage('')
+      setErrorMessage(`Failed to generate activation codes: ${result.error.message || result.error}`)
+      return
+    }
+
     setActivationMessage(`${count} activation code${count > 1 ? 's' : ''} generated for ${codePlan} membership.`)
   }
 
@@ -116,22 +126,14 @@ function AdminDashboardPage() {
       setLoadingAdminData(true)
       setAdminError('')
       try {
-        const res = await fetch((import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8080') + '/admin/data', {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${import.meta.env.VITE_ADMIN_API_SECRET || ''}`,
-          },
-        })
-
-        if (!res.ok) {
-          const text = await res.text()
-          setAdminError(`Failed to load admin data: ${res.status} ${text}`)
+        const { data, error } = await supabase.rpc('admin_list_activation_codes', { p_limit: 100 })
+        if (error) {
+          setAdminError(error.message || 'Failed to load activation codes')
           setLoadingAdminData(false)
           return
         }
 
-        const json = await res.json()
-        setAdminData({ users: json.users || [], profiles: json.profiles || [], memberships: json.memberships || [] })
+        setAdminData({ users: [], profiles: [], memberships: Array.isArray(data) ? data : [] })
       } catch (err) {
         setAdminError(String(err))
       } finally {
