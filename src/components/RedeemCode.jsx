@@ -40,7 +40,7 @@ export default function RedeemCode({ onSuccess }) {
       <label className="block text-sm font-medium text-slate-700">Activation code</label>
       <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Enter activation code" className="w-full rounded-[1rem] border px-3 py-2" />
       <div className="flex items-center gap-3">
-        <button type="submit" disabled={loading} className="rounded-full bg-purple-600 px-4 py-2 text-white">
+        <button type="submit" disabled={loading} className="rounded-full bg-black px-4 py-2 text-white hover:bg-slate-900">
           {loading ? 'Activating...' : 'Activate code'}
         </button>
         {message ? <p className="text-sm text-slate-600">{message}</p> : null}
