@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import useUserStore from '../store/userStore'
 import RedeemCode from '../components/RedeemCode'
@@ -35,42 +35,13 @@ function MembershipPaymentPage() {
   const fetchMyMembership = useUserStore((state) => state.fetchMyMembership)
 
   // fetch membership on mount in case server-side membership exists
-  useMemo(() => {
+  useEffect(() => {
     fetchMyMembership()
-  }, [])
+  }, [fetchMyMembership])
 
   const plan = planDetails[selectedPlan] || planDetails.basic
 
   const isActive = useMemo(() => Boolean(membership?.isActive && membership?.expiresAt && membership.expiresAt > Date.now()), [membership])
-
-  const handleSubmit = (event) => {
-    event.preventDefault()
-
-    const trimmedCode = activationCode.trim()
-
-    if (!trimmedCode) {
-      setMessage('Please enter the activation code provided by support.')
-      return
-    }
-
-    const codePrefix = plan.title.split(' ')[0].toUpperCase()
-    const isValidCode = trimmedCode.toUpperCase().startsWith(codePrefix) || trimmedCode.length >= 4
-
-    if (!isValidCode) {
-      setMessage('That code does not match this plan. Please contact support for the correct activation code.')
-      return
-    }
-
-    activateMembership({
-      planKey: plan.key,
-      planTitle: plan.title,
-      activationCode: trimmedCode,
-      durationDays: plan.durationDays,
-    })
-
-    setMessage(`Your ${plan.title} is now active. Your membership countdown has started.`)
-    setActivationCode('')
-  }
 
   return (
     <div className="space-y-8 rounded-[2rem] bg-white/95 p-8 shadow-soft sm:p-10">

@@ -17,18 +17,30 @@ function RegisterPage() {
     event.preventDefault()
     setError('')
 
+    console.log('[auth] RegisterPage submit', { fullName, email })
+
     const { data, error } = await signUpWithEmail(fullName, email, password)
     if (error) {
       const message = error.message || JSON.stringify(error) || 'Signup failed. Please check your Supabase auth and SMTP configuration.'
+      console.error('[auth] RegisterPage signUp error', error)
       setError(message)
       return
     }
 
-    const session = data?.session ?? null
-    const user = session?.user ?? data?.user ?? null
+    console.log('[auth] RegisterPage signUp result', { data })
 
-    // When email confirmation is required Supabase may not return a user/session immediately.
+    const session = data?.session ?? null
+
+    if (!session) {
+      console.log('[auth] RegisterPage awaiting confirmation, no session returned')
+      setAwaitingConfirmation(true)
+      setCreatedEmail(email)
+      return
+    }
+
+    const user = session.user
     if (!user) {
+      console.log('[auth] RegisterPage no session user returned despite session present')
       setAwaitingConfirmation(true)
       setCreatedEmail(email)
       return
@@ -36,6 +48,7 @@ function RegisterPage() {
 
     const profileResult = await getProfile(user.id)
     loginSuccess(session, profileResult.data)
+    console.log('[auth] RegisterPage redirecting to dashboard after successful signup and login')
     navigate('/dashboard', { replace: true })
   }
 

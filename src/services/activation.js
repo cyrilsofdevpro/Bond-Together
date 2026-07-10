@@ -12,5 +12,9 @@ export async function activateMembershipCode(code) {
     throw error
   }
 
+  if (Array.isArray(data)) {
+    return data[0] || null
+  }
+
   return data
 }

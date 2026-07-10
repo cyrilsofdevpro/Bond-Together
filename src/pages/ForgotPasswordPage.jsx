@@ -1,6 +1,31 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { sendResetPasswordEmail } from '../supabase/authService'
 
 function ForgotPasswordPage() {
+  const [email, setEmail] = useState('')
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    setError('')
+    setMessage('')
+
+    if (!email) {
+      setError('Please enter your email address.')
+      return
+    }
+
+    const { error } = await sendResetPasswordEmail(email)
+    if (error) {
+      setError(error.message || 'Unable to send reset email. Please check your Supabase SMTP settings.')
+      return
+    }
+
+    setMessage('A password reset link has been sent to your email address.')
+  }
+
   return (
     <div className="mx-auto max-w-3xl rounded-[2rem] bg-white/95 p-10 shadow-soft">
       <div className="space-y-4">
@@ -8,11 +33,19 @@ function ForgotPasswordPage() {
         <h1 className="text-4xl font-semibold text-night">Recover access to your account</h1>
         <p className="text-slate-600">Enter your email and we’ll send you a secure link to reset your password.</p>
       </div>
-      <form className="mt-10 space-y-5">
+      <form onSubmit={handleSubmit} className="mt-10 space-y-5">
         <label className="block">
           <span className="text-sm font-medium text-slate-700">Email address</span>
-          <input type="email" placeholder="you@example.com" className="mt-3 w-full rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4 text-slate-900 outline-none transition focus:border-purple-500 focus:ring-2 focus:ring-purple-100" />
+          <input
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="you@example.com"
+            className="mt-3 w-full rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4 text-slate-900 outline-none transition focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+          />
         </label>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        {message && <p className="text-sm text-emerald-600">{message}</p>}
         <button type="submit" className="inline-flex items-center justify-center rounded-full bg-night px-8 py-4 text-sm font-semibold text-white transition hover:bg-slate-900">
           Send reset link
         </button>

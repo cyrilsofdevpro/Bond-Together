@@ -125,13 +125,18 @@ begin
 
   return query
   with inserted as (
-    insert into public.activation_codes (code, plan_key, duration)
+    insert into public.activation_codes as ac (code, plan_key, duration)
     select
       upper(substring(md5(gen_random_uuid()::text) from 1 for 12)) as code,
       p_plan as plan_key,
       p_duration as duration
     from generate_series(1, p_count)
-    returning id, code, plan_key, duration, created_at
+    returning
+      ac.id as id,
+      ac.code as code,
+      ac.plan_key as plan_key,
+      ac.duration as duration,
+      ac.created_at as created_at
   )
   select
     inserted.id,
@@ -191,9 +196,11 @@ begin
 
   v_expires := now() + v_duration;
 
-  insert into public.user_memberships (user_id, plan_key, activation_code_id, activated_at, expires_at)
+  insert into public.user_memberships as um (user_id, plan_key, activation_code_id, activated_at, expires_at)
   values (v_user, v_plan_key, v_activation_code_id, now(), v_expires)
-  returning id, activated_at
+  returning
+    um.id as id,
+    um.activated_at as activated_at
   into v_membership_id, v_activated_at;
 
   update public.activation_codes as ac
@@ -243,6 +250,57 @@ begin
     and um.expires_at >= now()
   order by um.activated_at desc
   limit 1;
+end;
+$$;
+
+drop function if exists public.admin_get_users_with_memberships();
+create function public.admin_get_users_with_memberships()
+returns table (
+  user_id uuid,
+  email text,
+  role text,
+  created_at timestamptz,
+  full_name text,
+  username text,
+  is_admin boolean,
+  plan_key text,
+  activated_at timestamptz,
+  expires_at timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.jwt() -> 'app_metadata' ->> 'role' <> 'admin'
+     and auth.role() <> 'service_role'
+     and not public.is_admin_user() then
+    raise exception 'not_authorized';
+  end if;
+
+  return query
+  select
+    u.id as user_id,
+    u.email,
+    coalesce(u.app_metadata ->> 'role', u.role, 'user') as role,
+    u.created_at,
+    p.full_name,
+    p.username,
+    coalesce(p.is_admin, false) as is_admin,
+    m.plan_key,
+    m.activated_at,
+    m.expires_at
+  from auth.users as u
+  left join public.profiles p on p.user_id = u.id
+  left join lateral (
+    select plan_key, activated_at, expires_at
+    from public.user_memberships
+    where user_id = u.id
+      and expires_at >= now()
+    order by activated_at desc
+    limit 1
+  ) m on true
+  order by u.created_at desc;
 end;
 $$;
 

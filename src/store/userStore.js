@@ -93,14 +93,15 @@ const useUserStore = create((set, get) => ({
         premium: 'Premium Membership',
       }
 
-      const planKey = membershipRow.plan_key || 'basic'
+      const rawPlanKey = membershipRow.plan_key || membershipRow.planKey || 'basic'
+      const planKey = String(rawPlanKey).toLowerCase()
       const membership = {
         planKey,
-        planTitle: planTitles[planKey] || planKey,
+        planTitle: planTitles[planKey] || String(rawPlanKey),
         activationCode: normalizedCode,
         isActive: true,
-        activatedAt: new Date(membershipRow.activated_at).getTime(),
-        expiresAt: new Date(membershipRow.expires_at).getTime(),
+        activatedAt: new Date(membershipRow.activated_at || membershipRow.activatedAt).getTime(),
+        expiresAt: new Date(membershipRow.expires_at || membershipRow.expiresAt).getTime(),
       }
 
       persistMembership(membership)
@@ -135,13 +136,15 @@ const useUserStore = create((set, get) => ({
         premium: 'Premium Membership',
       }
 
+      const rawPlanKey = row.plan_key || row.planKey || 'basic'
+      const planKey = String(rawPlanKey).toLowerCase()
       const membership = {
-        planKey: row.plan_key,
-        planTitle: planTitles[row.plan_key] || row.plan_key,
-        activationCode: row.activation_code_id || null,
+        planKey,
+        planTitle: planTitles[planKey] || String(rawPlanKey),
+        activationCode: row.activation_code_id || row.activationCodeId || null,
         isActive: true,
-        activatedAt: new Date(row.activated_at).getTime(),
-        expiresAt: new Date(row.expires_at).getTime(),
+        activatedAt: new Date(row.activated_at || row.activatedAt).getTime(),
+        expiresAt: new Date(row.expires_at || row.expiresAt).getTime(),
       }
 
       persistMembership(membership)

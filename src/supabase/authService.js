@@ -17,18 +17,34 @@ export async function signInWithEmail(email, password) {
 
 export async function signUpWithEmail(fullName, email, password) {
   if (!isSupabaseConfigured) {
+    console.error('[auth] signUp request blocked: Supabase is not configured')
     return { data: null, error: new Error('Supabase is not configured') }
   }
 
+  const redirectUrl = `${window.location.origin}/auth/callback`
+  const requestPayload = {
+    email,
+  }
+  const signUpOptions = {
+    emailRedirectTo: redirectUrl,
+    data: { full_name: fullName },
+  }
+
+  console.log('[auth] signUp request', { requestPayload, signUpOptions })
+
   try {
-    const { data, error } = await supabase.auth.signUp(
-      { email, password },
-      { data: { full_name: fullName } }
-    )
+    const { data, error } = await supabase.auth.signUp({ email, password }, signUpOptions)
+    console.log('[auth] signUp response', { data, error })
+
+    if (error) {
+      console.error('[auth] signUp error', error)
+    }
 
     return { data, error }
   } catch (error) {
-    return { data: null, error: error instanceof Error ? error : new Error(JSON.stringify(error)) }
+    const normalizedError = error instanceof Error ? error : new Error(JSON.stringify(error))
+    console.error('[auth] signUp exception', normalizedError)
+    return { data: null, error: normalizedError }
   }
 }
 
@@ -44,6 +60,19 @@ export async function getCurrentSession() {
 
   const { data, error } = await supabase.auth.getSession()
   return { data, error }
+}
+
+export async function sendResetPasswordEmail(email) {
+  if (!isSupabaseConfigured) {
+    return { data: null, error: new Error('Supabase is not configured') }
+  }
+
+  try {
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email)
+    return { data, error }
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error : new Error(JSON.stringify(error)) }
+  }
 }
 
 export async function getProfile(userId) {

@@ -16,8 +16,13 @@ function AuthListener() {
     let subscription
 
     async function loadSession() {
+      console.log('[auth] AuthListener loadSession start')
       const { data, error } = await getCurrentSession()
-      if (error) return
+      console.log('[auth] AuthListener loadSession result', { data, error })
+
+      if (error) {
+        console.error('[auth] AuthListener getCurrentSession error', error)
+      }
 
       if (data?.session?.user) {
         const profileResult = await getProfile(data.session.user.id)
@@ -27,13 +32,14 @@ function AuthListener() {
       try {
         setAuthInitialized(true)
       } catch (e) {
-        // ignore
+        console.error('[auth] AuthListener setAuthInitialized error', e)
       }
     }
 
     loadSession()
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[auth] auth state change', { event, session })
       if (session?.user) {
         const profileResult = await getProfile(session.user.id)
         loginSuccess(session, profileResult.data)
