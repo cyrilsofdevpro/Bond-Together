@@ -125,19 +125,21 @@ begin
 
   return query
   with inserted as (
-    insert into public.activation_codes as ac (code, plan_key, duration)
+    insert into public.activation_codes (code, plan_key, duration)
     select
-      upper(substring(md5(gen_random_uuid()::text) from 1 for 12)),
-      p_plan,
-      p_duration
+      upper(substring(md5(gen_random_uuid()::text) from 1 for 12)) as code,
+      p_plan as plan_key,
+      p_duration as duration
     from generate_series(1, p_count)
-    returning ac.id as id,
-              ac.code as code,
-              ac.plan_key as plan_key,
-              ac.duration as duration,
-              ac.created_at as created_at
+    returning id, code, plan_key, duration, created_at
   )
-  select id, code, plan_key, duration, created_at from inserted;
+  select
+    inserted.id,
+    inserted.code,
+    inserted.plan_key,
+    inserted.duration,
+    inserted.created_at
+  from inserted;
 end;
 $$;
 
@@ -157,8 +159,13 @@ set search_path = public
 as $$
 declare
   v_user uuid := auth.uid();
-  v_code record;
+  v_activation_code_id uuid;
+  v_plan_key text;
+  v_duration interval;
+  v_used boolean;
   v_expires timestamptz;
+  v_membership_id uuid;
+  v_activated_at timestamptz;
 begin
   if v_user is null then
     raise exception 'not_authenticated';
@@ -169,8 +176,8 @@ begin
     ac.plan_key,
     ac.duration,
     ac.used
-  into v_code
-  from public.activation_codes ac
+  into v_activation_code_id, v_plan_key, v_duration, v_used
+  from public.activation_codes as ac
   where ac.code = upper(trim(p_code))
   for update of ac;
 
@@ -178,26 +185,31 @@ begin
     raise exception 'invalid_activation_code';
   end if;
 
-  if v_code.used then
+  if v_used then
     raise exception 'activation_code_already_used';
   end if;
 
-  v_expires := now() + v_code.duration;
+  v_expires := now() + v_duration;
 
-  with inserted as (
-    insert into public.user_memberships (user_id, plan_key, activation_code_id, activated_at, expires_at)
-    values (v_user, v_code.plan_key, v_code.id, now(), v_expires)
-    returning id, user_id, plan_key, activation_code_id, activated_at, expires_at
-  )
-  update public.activation_codes ac
+  insert into public.user_memberships (user_id, plan_key, activation_code_id, activated_at, expires_at)
+  values (v_user, v_plan_key, v_activation_code_id, now(), v_expires)
+  returning id, activated_at
+  into v_membership_id, v_activated_at;
+
+  update public.activation_codes as ac
   set used = true,
       used_by = v_user,
       used_at = now()
-  where ac.id = v_code.id;
+  where ac.id = v_activation_code_id;
 
   return query
-  select i.id, i.user_id, i.plan_key, i.activation_code_id, i.activated_at, i.expires_at
-  from inserted i;
+  select
+    v_membership_id as id,
+    v_user as user_id,
+    v_plan_key as plan_key,
+    v_activation_code_id as activation_code_id,
+    v_activated_at as activated_at,
+    v_expires as expires_at;
 end;
 $$;
 
@@ -218,11 +230,18 @@ set search_path = public
 as $$
 begin
   return query
-  select id, user_id, plan_key, activation_code_id, activated_at, expires_at, created_at
-  from public.user_memberships
-  where user_id = auth.uid()
-    and expires_at >= now()
-  order by activated_at desc
+  select
+    um.id,
+    um.user_id,
+    um.plan_key,
+    um.activation_code_id,
+    um.activated_at,
+    um.expires_at,
+    um.created_at
+  from public.user_memberships as um
+  where um.user_id = auth.uid()
+    and um.expires_at >= now()
+  order by um.activated_at desc
   limit 1;
 end;
 $$;
@@ -251,9 +270,17 @@ begin
   end if;
 
   return query
-  select id, code, plan_key, duration, used, used_by, used_at, created_at
-  from public.activation_codes
-  order by created_at desc
+  select
+    ac.id,
+    ac.code,
+    ac.plan_key,
+    ac.duration,
+    ac.used,
+    ac.used_by,
+    ac.used_at,
+    ac.created_at
+  from public.activation_codes as ac
+  order by ac.created_at desc
   limit p_limit;
 end;
 $$;
@@ -281,10 +308,17 @@ begin
   end if;
 
   return query
-  update public.activation_codes
+  update public.activation_codes as ac
   set used = true,
       used_at = now()
-  where code = upper(trim(p_code))
-  returning id, code, plan_key, used, used_by, used_at, created_at;
+  where ac.code = upper(trim(p_code))
+  returning
+    ac.id,
+    ac.code,
+    ac.plan_key,
+    ac.used,
+    ac.used_by,
+    ac.used_at,
+    ac.created_at;
 end;
 $$;
