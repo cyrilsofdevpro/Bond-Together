@@ -1,4 +1,4 @@
-﻿-- Fresh Supabase activation schema and RPCs
+-- Fresh Supabase activation schema and RPCs
 -- Run this in the Supabase SQL editor to replace your current activation-code setup.
 
 create extension if not exists "pgcrypto";
