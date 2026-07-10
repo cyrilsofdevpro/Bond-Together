@@ -22,18 +22,22 @@ export async function signUpWithEmail(fullName, email, password) {
   }
 
   const redirectUrl = `${window.location.origin}/auth/callback`
-  const requestPayload = {
-    email,
-  }
   const signUpOptions = {
     emailRedirectTo: redirectUrl,
     data: { full_name: fullName },
   }
 
-  console.log('[auth] signUp request', { requestPayload, signUpOptions })
+  console.log('[auth] signUp request', {
+    email,
+    signUpOptions,
+  })
 
   try {
-    const { data, error } = await supabase.auth.signUp({ email, password }, signUpOptions)
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: signUpOptions,
+    })
     console.log('[auth] signUp response', { data, error })
 
     if (error) {
@@ -60,6 +64,19 @@ export async function getCurrentSession() {
 
   const { data, error } = await supabase.auth.getSession()
   return { data, error }
+}
+
+export async function getSessionFromUrl() {
+  if (!isSupabaseConfigured) {
+    return emptyResult
+  }
+
+  try {
+    const { data, error } = await supabase.auth.getSessionFromUrl()
+    return { data, error }
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error : new Error(JSON.stringify(error)) }
+  }
 }
 
 export async function sendResetPasswordEmail(email) {
