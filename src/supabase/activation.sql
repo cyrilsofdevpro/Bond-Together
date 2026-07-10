@@ -1,4 +1,5 @@
--- Run this in the Supabase SQL editor to create activation code tables, policies, and RPCs.
+﻿-- Fresh Supabase activation schema and RPCs
+-- Run this in the Supabase SQL editor to replace your current activation-code setup.
 
 create extension if not exists "pgcrypto";
 
@@ -23,42 +24,9 @@ create table if not exists public.user_memberships (
   created_at timestamptz not null default now()
 );
 
-
--- Create or update user profile on signup if missing.
-create or replace function public.handle_new_user()
-returns trigger
-language plpgsql
-security definer set search_path = public
-as $$
-begin
-  insert into public.profiles (user_id, full_name, username, bio)
-  values (
-    new.id,
-    coalesce(new.raw_user_meta_data ->> 'full_name', split_part(new.email, '@', 1)),
-    lower(replace(coalesce(new.raw_user_meta_data ->> 'full_name', split_part(new.email, '@', 1)), ' ', '_')),
-    ''
-  )
-  on conflict (user_id) do nothing;
-  return new;
-end;
-$$;
-
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-after insert on auth.users
-for each row execute function public.handle_new_user();
-
-BEGIN;
--- Acquire DDL locks in a stable order to avoid deadlock when updating policies and triggers.
-lock table public.activation_codes,
-           public.user_memberships,
-           auth.users
-           in access exclusive mode;
-
 alter table public.activation_codes enable row level security;
 alter table public.user_memberships enable row level security;
 
--- Helper to determine whether current authenticated user is an admin.
 create or replace function public.is_admin_user()
 returns boolean
 language plpgsql
@@ -69,7 +37,8 @@ declare
   v_is_admin boolean := false;
 begin
   if auth.jwt() ->> 'role' = 'admin'
-     or auth.jwt() -> 'app_metadata' ->> 'role' = 'admin' then
+     or auth.jwt() -> 'app_metadata' ->> 'role' = 'admin'
+     or auth.role() = 'service_role' then
     return true;
   end if;
 
@@ -88,20 +57,19 @@ begin
 end;
 $$;
 
--- Allow users to read and create only their own membership records.
 drop policy if exists "Users can view own memberships" on public.user_memberships;
 create policy "Users can view own memberships"
   on public.user_memberships
   for select
   using (auth.uid() = user_id);
 
- drop policy if exists "Users can insert own membership" on public.user_memberships;
+drop policy if exists "Users can insert own membership" on public.user_memberships;
 create policy "Users can insert own membership"
   on public.user_memberships
   for insert
   with check (auth.uid() = user_id);
 
- drop policy if exists "Admin can manage memberships" on public.user_memberships;
+drop policy if exists "Admin can manage memberships" on public.user_memberships;
 create policy "Admin can manage memberships"
   on public.user_memberships
   for all
@@ -116,9 +84,6 @@ create policy "Admin can manage memberships"
     or public.is_admin_user()
   );
 
-COMMIT;
-
--- Prevent normal users from reading activation codes directly.
 drop policy if exists "Admin can manage activation codes" on public.activation_codes;
 create policy "Admin can manage activation codes"
   on public.activation_codes
@@ -134,14 +99,19 @@ create policy "Admin can manage activation codes"
     or public.is_admin_user()
   );
 
--- Generate activation codes via RPC. Calls must be made by an admin user or service-role session.
 drop function if exists public.generate_activation_codes(text, int, interval);
 create function public.generate_activation_codes(
   p_plan text,
   p_count int,
   p_duration interval default '30 days'
 )
-returns table (id uuid, code text, plan_key text, duration interval, created_at timestamptz)
+returns table (
+  id uuid,
+  code text,
+  plan_key text,
+  duration interval,
+  created_at timestamptz
+)
 language plpgsql
 security definer
 set search_path = public
@@ -160,11 +130,10 @@ begin
     p_plan,
     p_duration
   from generate_series(1, p_count)
-  returning public.activation_codes.id, public.activation_codes.code, public.activation_codes.plan_key, public.activation_codes.duration, public.activation_codes.created_at;
+  returning id, code, plan_key, duration, created_at;
 end;
 $$;
 
--- Redeem an activation code directly from the client using user auth.
 drop function if exists public.redeem_activation_code(text);
 create function public.redeem_activation_code(p_code text)
 returns table (
@@ -188,10 +157,15 @@ begin
     raise exception 'not_authenticated';
   end if;
 
-  select * into v_code
-  from public.activation_codes
-  where code = upper(trim(p_code))
-  for update;
+  select
+    ac.id,
+    ac.plan_key,
+    ac.duration,
+    ac.used
+  into v_code
+  from public.activation_codes ac
+  where ac.code = upper(trim(p_code))
+  for update of ac;
 
   if not found then
     raise exception 'invalid_activation_code';
@@ -208,26 +182,18 @@ begin
     values (v_user, v_code.plan_key, v_code.id, now(), v_expires)
     returning id, user_id, plan_key, activation_code_id, activated_at, expires_at
   )
-  update public.activation_codes
+  update public.activation_codes ac
   set used = true,
       used_by = v_user,
       used_at = now()
-  where public.activation_codes.id = v_code.id;
+  where ac.id = v_code.id;
 
-  -- Explicitly select inserted columns to avoid ambiguous column references
   return query
-  select
-    inserted.id,
-    inserted.user_id,
-    inserted.plan_key,
-    inserted.activation_code_id,
-    inserted.activated_at,
-    inserted.expires_at
-  from inserted;
+  select i.id, i.user_id, i.plan_key, i.activation_code_id, i.activated_at, i.expires_at
+  from inserted i;
 end;
 $$;
 
--- Return the current user's active membership record, if any.
 drop function if exists public.get_my_active_membership();
 create function public.get_my_active_membership()
 returns table (
@@ -254,9 +220,18 @@ begin
 end;
 $$;
 
--- Admin helper RPCs
-create or replace function public.admin_list_activation_codes(p_limit int default 100)
-returns table (id uuid, code text, plan_key text, duration interval, used boolean, used_by uuid, used_at timestamptz, created_at timestamptz)
+drop function if exists public.admin_list_activation_codes(int);
+create function public.admin_list_activation_codes(p_limit int default 100)
+returns table (
+  id uuid,
+  code text,
+  plan_key text,
+  duration interval,
+  used boolean,
+  used_by uuid,
+  used_at timestamptz,
+  created_at timestamptz
+)
 language plpgsql
 security definer
 set search_path = public
@@ -278,7 +253,15 @@ $$;
 
 drop function if exists public.admin_mark_code_used(text);
 create function public.admin_mark_code_used(p_code text)
-returns table (id uuid, code text, plan_key text, used boolean, used_by uuid, used_at timestamptz, created_at timestamptz)
+returns table (
+  id uuid,
+  code text,
+  plan_key text,
+  used boolean,
+  used_by uuid,
+  used_at timestamptz,
+  created_at timestamptz
+)
 language plpgsql
 security definer
 set search_path = public
