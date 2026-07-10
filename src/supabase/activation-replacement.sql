@@ -125,13 +125,17 @@ begin
 
   return query
   with inserted as (
-    insert into public.activation_codes (code, plan_key, duration)
+    insert into public.activation_codes as ac (code, plan_key, duration)
     select
       upper(substring(md5(gen_random_uuid()::text) from 1 for 12)),
       p_plan,
       p_duration
     from generate_series(1, p_count)
-    returning id, code, plan_key, duration, created_at
+    returning ac.id as id,
+              ac.code as code,
+              ac.plan_key as plan_key,
+              ac.duration as duration,
+              ac.created_at as created_at
   )
   select id, code, plan_key, duration, created_at from inserted;
 end;
